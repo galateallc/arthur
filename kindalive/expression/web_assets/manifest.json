@@ -1,0 +1,19 @@
+{
+  "name": "Kindalive",
+  "short_name": "Kindalive",
+  "description": "Robot emotions on an LED dot-matrix face, driven by simulated neurochemistry.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0B0D12",
+  "theme_color": "#0B0D12",
+  "icons": [
+    {
+      "src": "/webassets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: tests (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: pip install -e ".[all,dev]"
+      - name: Run tests with coverage gate (>=80%)
+        run: pytest tests/ -m "not integration and not llm" --cov
+
+  # The core library (engine, emotions, face projection, Robot) supports
+  # Python 3.9 with zero dependencies — e.g. Raspberry Pi OS Bullseye.
+  # The NiceGUI dashboard needs 3.10+, so its tests are skipped here.
+  test-core-py39:
+    name: core tests (py3.9, no web extra)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - name: Install (core + openai backend only)
+        run: pip install -e ".[openai,dev]"
+      - name: Run core tests
+        run: >
+          pytest tests/ -m "not integration and not llm"
+          --ignore tests/test_web_ui.py
+          --ignore tests/test_mobile.py
+
+  mypy:
+    name: mypy --strict
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e ".[all,dev]"
+      - name: Type-check
+        run: mypy

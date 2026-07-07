@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Maskable: content kept within the central safe zone. -->
+  <rect width="512" height="512" rx="96" fill="#0B0D12"/>
+  <rect x="64" y="64" width="384" height="384" rx="80" fill="#141820" stroke="#232834" stroke-width="4"/>
+  <!-- Eyes -->
+  <circle cx="192" cy="220" r="34" fill="#7C9CFF"/>
+  <circle cx="320" cy="220" r="34" fill="#7C9CFF"/>
+  <circle cx="200" cy="212" r="11" fill="#0B0D12"/>
+  <circle cx="328" cy="212" r="11" fill="#0B0D12"/>
+  <!-- Smile -->
+  <path d="M168 312 Q256 392 344 312" fill="none" stroke="#4FB7A6" stroke-width="26" stroke-linecap="round"/>
+</svg>
