@@ -98,6 +98,8 @@ Open <http://localhost:8080>, type something to the robot, and watch
 the face react. The UI auto-loads a `.env` file from the repo root, so
 you can keep `ANTHROPIC_API_KEY=...` there instead of exporting it.
 
+![The full Kindalive dashboard: live neurochemistry bars on the left, the LED dot-matrix face in the center with the dominant emotion beneath it, the emotion mix on the right, and the "Tell the robot something…" input below](docs/screenshots/web_ui.png)
+
 ### On your phone
 
 The dashboard is responsive and installable (Add to Home Screen launches
