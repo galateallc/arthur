@@ -461,14 +461,12 @@ class ImpulseFactory:
     def weather_storm():
         return [ChemicalImpulse(Chemical.CORTISOL, delta=0.15),
                 ChemicalImpulse(Chemical.ADRENALINE, delta=0.1)]
-
-def make_event(source, event_type, summary, urgency="realtime"):
-    """Helper to build UserText with all required fields."""
-    return UserText(
-        source=source, event_type=event_type, summary=summary,
-        raw_data={}, timestamp=datetime.now(), urgency=urgency,
-    )
 ```
+
+The factory names (`weather_sunny`, `sports_goal`, `market_crash`, …)
+are just descriptive labels for impulse recipes — there are no weather
+or sports *event types* in the system anymore. The only real input is
+a freeform paragraph (`UserText`).
 
 ```python
 # test_integration.py
@@ -504,34 +502,24 @@ def test_couch_scenario_engine_level():
 
 async def test_couch_scenario_full_pipeline():
     """
-    Same scenario through the full pipeline:
-    UserText → MockLLM → Engine → EmotionProjection.
+    The same idea through the full pipeline:
+    UserText (freeform paragraph) → MockLLMBackend → Engine → EmotionProjection.
     Verifies the layers integrate correctly.
     """
-    clock = ManualClock()
-    mock_llm = MockLLMClient(responses={
-        "presence:owner_arrived": [
-            ChemicalImpulse(Chemical.OXYTOCIN, delta=0.3, duration_seconds=300)],
-        "weather:conditions": [
-            ChemicalImpulse(Chemical.SEROTONIN, delta=0.15)],
-        "finance:market_close": [
-            ChemicalImpulse(Chemical.DOPAMINE, delta=0.15)],
-        "sports:goal": [
-            ChemicalImpulse(Chemical.DOPAMINE, delta=0.25),
-            ChemicalImpulse(Chemical.ADRENALINE, delta=0.35)],
-    })
-    robot = Robot(
-        engine=NeurochemicalEngine(clock=clock),
-        interpreter=LLMInterpreter(llm_client=mock_llm, cache=ImpulseCache()),
-    )
+    backend = MockLLMBackend()
+    backend.enqueue_impulses([
+        {"chemical": "oxytocin", "delta": 0.3, "duration_seconds": 300},
+        {"chemical": "dopamine", "delta": 0.25},
+        {"chemical": "adrenaline", "delta": 0.35},
+    ])
 
-    await robot.process_event(make_event("presence", "owner_arrived", "Owner sat down"))
-    clock.advance(minutes=5)
-    await robot.process_event(make_event("weather", "conditions", "Sunny, 72°F"))
-    clock.advance(minutes=10)
-    await robot.process_event(make_event("finance", "market_close", "S&P up 1.2%"))
-    clock.advance(minutes=2)
-    await robot.process_event(make_event("sports", "goal", "Home team scored!"))
+    clock = ManualClock()
+    robot = Robot(engine=NeurochemicalEngine(clock=clock), llm_backend=backend)
+
+    await robot.process_event(UserText(
+        summary="My owner sat down next to me, the home team just "
+                "scored, and it's a beautiful afternoon."
+    ))
 
     emotions = robot.current_emotions()
     assert emotions.happiness > emotions.anxiety
@@ -1013,7 +1001,11 @@ Live LLM integration tests (and the LLM benchmark) run on a separate schedule si
 
 ## Visual Debugging
 
-During development, a live console dashboard helps immensely:
+During development, the web dashboard (`python3 -m
+kindalive.expression.web_ui`, see [web-ui.md](web-ui.md)) is the live
+debugger: it shows every chemical level as a bar, the full emotion mix,
+the dominant emotion under the face, and the interpreter status label
+(`LLM` / `CACHE` / `FALLBACK`). Conceptually it renders:
 
 ```
 ╔══════════════════════════════════════════════╗
@@ -1030,15 +1022,12 @@ During development, a live console dashboard helps immensely:
 ╠══════════════════════════════════════════════╣
 ║  Dominant: EXCITEMENT (0.82)                 ║
 ║  Mood: Happy + Excited + Bonding             ║
-╠══════════════════════════════════════════════╣
-║  Last events:                                ║
-║    [sports] Goal scored — BOS 3, MTL 2       ║
-║    [weather] Sunny, 72°F                     ║
-║    [presence] Owner nearby (12 min)          ║
 ╚══════════════════════════════════════════════╝
 ```
 
-This is built as an `ExpressionOutput` implementation, so it's testable and pluggable like everything else.
+For headless debugging there is also the one-shot CLI
+(`python3 -m kindalive.main --text "..."`), which prints the impulses
+the LLM returned and the resulting emotion snapshot.
 
 ---
 

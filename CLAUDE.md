@@ -71,8 +71,8 @@ pytest tests/test_properties.py
 # Live LLM integration (requires ANTHROPIC_API_KEY)
 ANTHROPIC_API_KEY=xxx pytest tests/ -m llm
 
-# LLM benchmark scorecard (30 scenarios)
-pytest tests/test_llm_benchmark.py -v --tb=short
+# Live LLM benchmark subset (scenario reference: docs/llm-benchmark.md)
+ANTHROPIC_API_KEY=xxx pytest tests/test_interpreter/test_freeform_paragraphs.py -v --tb=short
 ```
 
 Target: **>80% code coverage**, **>90% LLM benchmark PASS rate**.

@@ -12,6 +12,16 @@ Each scenario defines:
 
 The benchmark runs against the live LLM and produces a pass/fail scorecard.
 
+> **Note on scenario format.** These scenarios predate the freeform-text
+> pivot: the `source`/`type` fields (sports, weather, finance, …) refer
+> to the removed data fetchers and no longer exist as event types — the
+> only real input today is a `user:freeform` paragraph. The scenarios
+> remain the calibration reference: to run one, feed its `summary` line
+> through `Robot.interpret_text(...)` as the paragraph. The automated
+> live-LLM subset lives in
+> `tests/test_interpreter/test_freeform_paragraphs.py` (gated on
+> `ANTHROPIC_API_KEY` and the `llm` marker).
+
 ---
 
 ## Scoring

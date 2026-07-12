@@ -151,15 +151,82 @@ face = FaceProjection.compute(robot.current_chemicals())
 
 ## Real Hardware
 
-`FaceState` is renderer-agnostic — the same 12 floats that drive the
-web face can drive physical hardware. [`examples/`](examples/) has two
-ready-to-run adapters, both with a terminal fallback so they work
-without hardware:
+`FaceState` is renderer-agnostic — the same 12 floats in `[0, 1]` that
+drive the web face can drive physical hardware. [`examples/`](examples/)
+has two ready-to-run adapters, and both degrade gracefully: without the
+driver library installed they render to the terminal, so you can develop
+the mapping on a laptop and copy the same file to a Raspberry Pi
+unchanged.
 
-- **MAX7219 8×8 LED matrix** (SPI, Raspberry Pi):
-  `python3 examples/led_matrix_face.py --mood joy`
-- **PCA9685 servo board** — 12 muscles → 12 servo channels for an
-  animatronic face: `python3 examples/servo_face.py --mood anger`
+Each demo injects a chemical impulse recipe (`--mood joy`, `fear`,
+`anger`, or `sadness`) and then lets the neurochemical engine run in
+real time: the expression blooms, then visibly decays back to the
+robot's baseline over ~20 seconds — the same fade you see on the web
+face. In a real robot you would drop the recipe and read `FaceState`
+from a live `Robot` instead.
+
+### MAX7219 8×8 LED matrix — a physical dot-matrix face
+
+The MAX7219 is a ~$3 SPI display driver, usually sold pre-soldered to
+an 8×8 LED module (and often as chainable 4-in-1 strips). The adapter
+condenses the 12 facial muscles onto the 8×8 grid: rows 0–1 are the
+brows (lifted when raised, shifted inward when knitted in anger), rows
+2–3 are the eyes (two rows when wide open, a squint when tightened),
+and rows 5–7 are the mouth (corners curl up for a smile, down for a
+frown, and the jaw opens into a hollow box).
+
+Wire it to the Pi's SPI header, enable SPI via
+`sudo raspi-config` → *Interface Options* → *SPI*, and run:
+
+| MAX7219 pin | Raspberry Pi |
+|-------------|--------------|
+| VCC | 5V |
+| GND | GND |
+| DIN | MOSI (pin 19) |
+| CS  | CE0 (pin 24) |
+| CLK | SCLK (pin 23) |
+
+```bash
+pip install luma.led_matrix
+python3 examples/led_matrix_face.py --mood joy
+```
+
+### PCA9685 servo board — an animatronic face
+
+The PCA9685 is a 16-channel PWM driver on I2C — the standard hobby
+board for driving many servos from two Pi pins. The adapter assigns one
+servo per muscle on channels 0–11, so a mechanical face (brow linkages,
+eyelids, lip corners, jaw) tracks the chemistry directly.
+
+The whole mapping is one table in `servo_face.py`: each channel gets a
+`(muscle, rest_angle, full_contraction_angle)` triple, and activation is
+linearly interpolated between the two angles (they may run "backwards"
+for mirrored linkages). Tuning your head to its linkage geometry means
+editing that table — no engine knowledge required.
+
+Enable I2C via `sudo raspi-config` → *Interface Options* → *I2C*, then:
+
+```bash
+pip install adafruit-circuitpython-servokit
+python3 examples/servo_face.py --mood anger
+```
+
+Power the servos from their own 5–6 V supply on the PCA9685's V+
+terminal (sharing ground with the Pi) — a dozen hobby servos can draw
+several amps, far more than the Pi's 5 V rail can source.
+
+### Bring your own actuators
+
+The part worth copying into your own robot is tiny — get a `FaceState`,
+map its 12 floats to whatever you have (LEDs, servos, an e-ink face, a
+plotter…):
+
+```python
+from kindalive.expression.face import FaceProjection
+
+face = FaceProjection.compute(engine.state)   # 12 floats in [0, 1]
+my_renderer.draw(face.lip_corner_pull, face.jaw_open, ...)
+```
 
 ## Documentation
 

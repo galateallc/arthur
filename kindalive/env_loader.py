@@ -1,10 +1,10 @@
 """Lightweight .env file loader — no external dependencies.
 
 Kindalive's convention is that users put API keys in a gitignored ``.env``
-file at the project root. The terminal UIs and ``kindalive.live`` expect
-users to ``source .env`` manually, but the web UI is launched directly
-via ``python3 -m kindalive.expression.web_ui`` and needs to pick those
-keys up itself — IDEs and browser launchers do not inherit a shell's
+file at the project root. The CLI can rely on users ``source``-ing it
+manually, but the web UI is launched directly via
+``python3 -m kindalive.expression.web_ui`` and needs to pick those keys
+up itself — IDEs and browser launchers do not inherit a shell's
 ``source`` state.
 
 This helper parses a ``.env`` file with the same syntax the project
@@ -12,7 +12,7 @@ already uses in ``.env.example``::
 
     # Comment
     export ANTHROPIC_API_KEY=sk-ant-...
-    OPENWEATHERMAP_API_KEY="abc 123"
+    KINDALIVE_LLM_BASE_URL="http://localhost:11434/v1"
 
 Rules:
 

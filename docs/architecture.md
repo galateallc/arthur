@@ -319,7 +319,7 @@ The `_extract_json_payload` + `_sanitize_json_quirks` functions in `llm_interpre
 
 ### Fallback Rules
 
-When the LLM is unavailable or its response fails to parse, `fallback_rules.py` provides heuristic impulses keyed on `"source:event_type"` (14 rules covering sports, weather, finance, news, and presence events). Each rule namespaces its `source_id` as `"fallback:{key}"` so the engine's saturation window dampens repeats of the *same event type* rather than lumping all fallbacks into one bucket.
+When the LLM is unavailable or its response fails to parse, `fallback_rules.py` supplies a single small cortisol nudge (`delta=0.05`, `source_id="fallback:freeform"`). It does not attempt to interpret the paragraph — it just registers that *something* happened so the robot flinches slightly instead of going numb. The 14 source-keyed heuristic rules from the fetcher era (sports, weather, finance, news, presence) were removed along with the fetchers; the only event shape left is `user:freeform`. The fixed `source_id` means the saturation window naturally dampens repeated fallbacks while the LLM stays down.
 
 ### Interpreter Telemetry
 

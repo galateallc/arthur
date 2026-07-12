@@ -21,7 +21,42 @@ python3 examples/servo_face.py --mood anger
 Each demo injects a chemical impulse recipe (joy / fear / anger /
 sadness), then lets the neurochemical engine decay in real time — you
 watch the expression fade back to the robot's baseline, exactly like the
-web face does.
+web face does. In a real robot you'd drop the recipe and read
+`FaceState` from a live `Robot` fed by the LLM interpreter.
+
+## MAX7219 LED matrix
+
+A ~$3 SPI display driver, usually pre-soldered to an 8x8 LED module.
+The adapter condenses the 12 muscles onto the grid: rows 0–1 brows
+(lifted when raised, shifted inward when knitted), rows 2–3 eyes (two
+rows wide open, one row squinting), rows 5–7 mouth (smile, frown, open
+jaw, pressed lips).
+
+Wiring (enable SPI first: `sudo raspi-config` → Interface Options → SPI):
+
+| MAX7219 pin | Raspberry Pi |
+|-------------|--------------|
+| VCC | 5V |
+| GND | GND |
+| DIN | MOSI (pin 19) |
+| CS  | CE0 (pin 24) |
+| CLK | SCLK (pin 23) |
+
+## PCA9685 servo board
+
+A 16-channel PWM driver on I2C (enable it: `sudo raspi-config` →
+Interface Options → I2C). One servo per muscle on channels 0–11. The
+entire mapping is the `SERVO_MAP` table in `servo_face.py` — each
+channel is a `(muscle, rest_angle, full_contraction_angle)` triple, and
+activation is linearly interpolated between the two angles. Angles may
+run "backwards" (rest > full) for mirrored linkages, so tuning an
+animatronic head is just editing that table.
+
+**Power:** feed the servos from their own 5–6 V supply on the board's
+V+ terminal, with ground common to the Pi. Twelve hobby servos can draw
+several amps — far more than the Pi's 5 V rail can source.
+
+## Bring your own actuators
 
 The interesting part to copy into your own robot is small: get a
 `FaceState`, map its 12 floats to whatever actuators you have.
