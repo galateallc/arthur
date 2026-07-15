@@ -6,6 +6,10 @@ chemistry shifts, and the face contorts. Chemical levels and the mix are
 shown beside the face; simulation time always runs in real time (with
 an optional speed multiplier to watch decay).
 
+Besides the textarea, external chats can talk to the companion through
+``POST /api/say`` (see ``_api_say``) — the robot reacts with its own
+feelings to whatever it overhears.
+
 Usage:
     python3 -m kindalive.expression.web_ui [--personality PRESET]
         [--llm auto|anthropic|openai|off] [--port PORT]
@@ -26,6 +30,10 @@ except ImportError as exc:  # pragma: no cover - exercised only without the extr
         "The web dashboard needs the 'nicegui' package. "
         'Install it with: pip install "kindalive[web]"'
     ) from exc
+
+# FastAPI ships with NiceGUI, so if the import above succeeded these do too.
+from fastapi import Request
+from fastapi.responses import JSONResponse
 
 from kindalive.engine.chemicals import Chemical
 from kindalive.engine.clock import ManualClock
@@ -118,6 +126,10 @@ class AppState:
         self.llm_label = llm_label
         self.speed = 1.0
         self.voice_on = True   # speak the robot's reply via the browser
+        # Companion-API bookkeeping: bumped by /api/say so the open page
+        # can surface externally-injected exchanges in its refresh loop.
+        self.external_seq = 0
+        self.external_text = ""
         self._build_robot()
 
     def _build_robot(self) -> None:
@@ -229,6 +241,55 @@ def _speak_js(text: str, rate: float, pitch: float) -> str:
     )
 
 
+# ── Companion API (external chat ingress) ─────────────────────────
+# The face is a companion with its own feelings: whatever text arrives
+# here, the robot reacts to *hearing it* — it does not mirror the
+# speaker's mood. This lets an outside conversation drive the face
+# (a Claude Code hook, a browser extension watching a chat window, a
+# home-automation script) while the dashboard stays a dumb display.
+
+_api_state: AppState | None = None
+
+
+async def _api_say(request: Request) -> JSONResponse:
+    """``POST /api/say`` with ``{"text": "..."}`` — feed one line of
+    outside conversation into the same pipeline as the textarea."""
+    state = _api_state
+    if state is None:  # pragma: no cover - route only exists after create_app
+        return JSONResponse({"error": "app not initialized"}, status_code=503)
+    try:
+        body = await request.json()
+    except Exception:
+        body = None
+    raw = body.get("text") if isinstance(body, dict) else None
+    text = raw.strip() if isinstance(raw, str) else ""
+    if not text:
+        return JSONResponse(
+            {"error": 'expected a JSON body like {"text": "..."}'},
+            status_code=400,
+        )
+
+    await state.robot.interpret_text(text)
+    # Let the open dashboard page surface this exchange on its next tick.
+    state.external_text = text
+    state.external_seq += 1
+
+    interp = state.robot.interpreter
+    dominant_name, dominant_val = state.robot.current_emotions().dominant()
+    return JSONResponse({
+        "ok": True,
+        "path": interp.last_path if interp is not None else "fallback",
+        "reply": state.robot.last_reply,
+        "impulses": [
+            {"chemical": imp.chemical.value, "delta": round(imp.delta, 3)}
+            for imp in state.robot.last_impulses
+        ],
+        "dominant_emotion": {
+            "name": dominant_name, "level": round(dominant_val, 3),
+        },
+    })
+
+
 # ── UI construction ───────────────────────────────────────────────
 
 
@@ -239,20 +300,27 @@ def create_app(
 ) -> AppState:
     """Build the NiceGUI app and return its state.
 
-    Registers the page and static files. Call ``ui.run()`` afterwards
-    to start the server.
+    Registers the page, static files, and the companion API. Call
+    ``ui.run()`` afterwards to start the server.
     """
+    global _api_state
+    register_routes = _api_state is None
     state = AppState(
         personality=personality,
         llm_backend=llm_backend,
         llm_label=llm_label,
     )
+    _api_state = state
 
-    app.add_static_files("/webassets", str(WEB_ASSETS_DIR))
+    if register_routes:
+        app.add_static_files("/webassets", str(WEB_ASSETS_DIR))
+        app.add_api_route("/api/say", _api_say, methods=["POST"])
 
-    @ui.page("/")
-    def main_page() -> None:
-        _build_page(state)
+        @ui.page("/")
+        def main_page() -> None:
+            page_state = _api_state
+            assert page_state is not None
+            _build_page(page_state)
 
     return state
 
@@ -411,18 +479,13 @@ def _build_page(state: AppState) -> None:
                     "margin-top: 4px; word-break: break-word;"
                 )
 
-                async def submit() -> None:
-                    text = (text_input.value or "").strip()
-                    if not text or not state.llm_backend:
-                        return
-                    text_input.value = ""
-                    reply_label.text = ""
-                    status_label.text = "thinking…"
-                    await state.robot.interpret_text(text)
+                def show_outcome(text: str) -> None:
+                    """Render one exchange: interpreter status, applied
+                    impulses, and the spoken reply (+ TTS). Shows the full
+                    phrase (no truncation) so it's clear exactly what was
+                    sent to the LLM."""
                     status = _interpreter_status(state)
                     impulses = _impulse_summary(state)
-                    # Show the full phrase (no truncation) so it's clear
-                    # exactly what was sent to the LLM.
                     status_label.text = (
                         f'"{text}" — {status}'
                         + (f"  →  {impulses}" if impulses else "")
@@ -435,6 +498,16 @@ def _build_page(state: AppState) -> None:
                                 state.robot.current_emotions()
                             )
                             ui.run_javascript(_speak_js(reply, rate, pitch))
+
+                async def submit() -> None:
+                    text = (text_input.value or "").strip()
+                    if not text or not state.llm_backend:
+                        return
+                    text_input.value = ""
+                    reply_label.text = ""
+                    status_label.text = "thinking…"
+                    await state.robot.interpret_text(text)
+                    show_outcome(text)
 
                 # Tap-target Send button — soft keyboards on phones vary
                 # in how (or whether) Enter submits, so a visible button
@@ -485,12 +558,21 @@ def _build_page(state: AppState) -> None:
     ui.timer(0.1, lambda: ui.run_javascript(SPEECH_SETUP_JS), once=True)
 
     # ── Refresh loop: advance time, repaint bars, drive the face ──
+    # Exchanges injected through the companion API surface on the next
+    # tick, exactly like a typed message. Snapshot the counter at page
+    # build so a reload doesn't replay (or re-speak) an old exchange.
+    seen_external = {"seq": state.external_seq}
+
     def tick() -> None:
         now = time.monotonic()
         dt = (now - state.last_tick) * state.speed
         state.last_tick = now
         if dt > 0:
             state.robot.advance(dt=dt)
+
+        if state.external_seq != seen_external["seq"]:
+            seen_external["seq"] = state.external_seq
+            show_outcome(state.external_text)
 
         chem = state.robot.current_chemicals()
         emotions = state.robot.current_emotions()

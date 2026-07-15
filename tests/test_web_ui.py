@@ -105,6 +105,66 @@ async def test_interpret_text_wraps_user_event():
 
 
 # ---------------------------------------------------------------------------
+# Companion API — POST /api/say
+# ---------------------------------------------------------------------------
+
+
+def _api_client():
+    """Fresh app state + a test client against the (global) NiceGUI app."""
+    from fastapi.testclient import TestClient
+    from nicegui import app
+
+    from kindalive.expression import web_ui
+
+    state = web_ui.create_app()
+    return state, TestClient(app)
+
+
+def test_api_say_feeds_the_robot():
+    """POST /api/say runs the text through the same pipeline as the
+    textarea: impulses apply, and the response reports the outcome."""
+    state, client = _api_client()
+
+    resp = client.post("/api/say", json={"text": "your owner won the lottery"})
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["path"] == "fallback"  # no LLM backend in unit tests
+    assert data["impulses"], "expected at least the fallback nudge"
+    assert all(
+        Chemical.from_string(i["chemical"]) in Chemical for i in data["impulses"]
+    )
+    assert data["dominant_emotion"]["name"]
+    assert 0.0 <= data["dominant_emotion"]["level"] <= 1.0
+    # The robot actually received the impulses...
+    assert state.robot.last_impulses
+    # ...and the open page is flagged to surface the exchange.
+    assert state.external_seq == 1
+    assert state.external_text == "your owner won the lottery"
+
+
+def test_api_say_rejects_bad_bodies():
+    """Empty, missing, or non-JSON text is a 400, and nothing reaches
+    the robot."""
+    state, client = _api_client()
+
+    assert client.post("/api/say", json={"text": "   "}).status_code == 400
+    assert client.post("/api/say", json={}).status_code == 400
+    assert client.post("/api/say", json={"text": None}).status_code == 400
+    assert client.post("/api/say", json={"text": 42}).status_code == 400
+    assert client.post("/api/say", json=[1, 2]).status_code == 400
+    assert client.post(
+        "/api/say",
+        content=b"not json",
+        headers={"Content-Type": "application/json"},
+    ).status_code == 400
+
+    assert state.robot.last_impulses == []
+    assert state.external_seq == 0
+
+
+# ---------------------------------------------------------------------------
 # Robot.last_impulses
 # ---------------------------------------------------------------------------
 

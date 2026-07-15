@@ -233,7 +233,53 @@ Simulation time always runs in real time. The 1×/10×/60× toggle speeds
 it up so you can watch adrenaline decay in seconds or cortisol over
 "hours".
 
-### 7. Reset (header)
+### 7. Companion API — `POST /api/say`
+
+The face is a **companion with its own feelings**: whatever it hears, it
+reacts to — it never mirrors the speaker's mood. Besides the textarea,
+external conversations can talk to it over HTTP, so the robot can sit in
+a side window and react while you chat with something else (a Claude
+Code hook, a browser extension watching a chat page, a home-automation
+script):
+
+```bash
+curl -X POST http://localhost:8080/api/say \
+  -H 'Content-Type: application/json' \
+  -d '{"text": "the neighbors brought over fresh cookies"}'
+```
+
+The text runs through the exact same pipeline as a typed message —
+`UserText` → LLM interpreter → impulses → chemistry — and the response
+reports what happened:
+
+```json
+{
+  "ok": true,
+  "path": "llm",
+  "reply": "Ooh, cookies! Save me one. Please.",
+  "impulses": [{"chemical": "dopamine", "delta": 0.25}],
+  "dominant_emotion": {"name": "happiness", "level": 0.54}
+}
+```
+
+`path` is the interpreter path (`llm` / `cache` / `fallback` — with no
+LLM configured you get the small fallback nudge). A non-string or
+missing `text` is a 400. If the dashboard page is open, it surfaces the
+exchange on its next tick exactly like a typed message: status line,
+🗣 reply bubble, and speech (if the 🔊 toggle is on). The single-client
+assumption applies — one shared Robot hears everything.
+
+Example — a Claude Code `UserPromptSubmit` hook script that lets the
+companion overhear everything you tell Claude (the hook receives
+`{"prompt": ...}` on stdin):
+
+```bash
+#!/bin/sh
+jq '{text: .prompt}' | curl -s -X POST http://localhost:8080/api/say \
+  -H 'Content-Type: application/json' -d @- > /dev/null
+```
+
+### 8. Reset (header)
 
 **Reset** rebuilds the robot — clearing the conversation thread and
 giving it a fresh chemical state — and clears the input/reply/status and
@@ -246,7 +292,9 @@ are kept.
 
 ## Architecture
 
-- **Single-client, local-first** — one Robot, one page, no auth.
+- **Single-client, local-first** — one Robot, one page, no auth. The
+  companion API (`POST /api/say`) shares that one Robot; exchanges it
+  injects surface on the open page's next refresh tick.
 - **Async-native** — the submit handler `await`s
   `robot.interpret_text(...)` directly; NiceGUI runs on FastAPI.
 - **10 Hz refresh** — one `ui.timer` advances the robot by wall-clock
@@ -259,7 +307,7 @@ are kept.
 
 | File | Role |
 |------|------|
-| `kindalive/expression/web_ui.py` | NiceGUI app — layout, handlers, refresh loop |
+| `kindalive/expression/web_ui.py` | NiceGUI app — layout, handlers, refresh loop, `/api/say` |
 | `kindalive/expression/face.py` | 12-muscle `FaceState` + `FaceProjection.compute` |
 | `kindalive/expression/face_3d.py` | Payload mapping + boot wiring |
 | `kindalive/expression/web_assets/face3d.js` | The LED dot-matrix face (2D-canvas renderer) |
