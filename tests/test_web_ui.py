@@ -142,6 +142,26 @@ def test_api_say_feeds_the_robot():
     # ...and the open page is flagged to surface the exchange.
     assert state.external_seq == 1
     assert state.external_text == "your owner won the lottery"
+    # Image-only integrations get an absolute, cache-busted face URL.
+    assert data["face_url"].startswith("http")
+    assert data["face_url"].endswith("/face.png?seq=1")
+
+
+def test_face_png_serves_the_current_expression():
+    """GET /face.png returns a PNG of the live face; the snapshot
+    changes when the chemistry changes."""
+    state, client = _api_client()
+
+    resp = client.get("/face.png")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "image/png"
+    assert resp.headers["cache-control"] == "no-store"
+    assert resp.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+    # Shove the chemistry somewhere expressive; the image must differ.
+    state.robot.current_chemicals().set(Chemical.CORTISOL, 1.0)
+    state.robot.current_chemicals().set(Chemical.ADRENALINE, 1.0)
+    assert client.get("/face.png").content != resp.content
 
 
 def test_api_say_rejects_bad_bodies():

@@ -32,7 +32,7 @@ except ImportError as exc:  # pragma: no cover - exercised only without the extr
     ) from exc
 
 # FastAPI ships with NiceGUI, so if the import above succeeded these do too.
-from fastapi import Request
+from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 
 from kindalive.engine.chemicals import Chemical
@@ -46,6 +46,7 @@ from kindalive.expression.face_3d import (
     payload_js,
 )
 from kindalive.expression.face import FaceProjection
+from kindalive.expression.face_image import render_face_png
 from kindalive.interpreter.llm_interpreter import LLMBackend
 from kindalive.robot import Robot
 
@@ -276,6 +277,12 @@ async def _api_say(request: Request) -> JSONResponse:
 
     interp = state.robot.interpreter
     dominant_name, dominant_val = state.robot.current_emotions().dominant()
+    # Absolute, cache-busted snapshot URL so image-only integrations
+    # (e.g. a custom GPT embedding a markdown image) can show the face.
+    face_url = (
+        str(request.base_url).rstrip("/")
+        + f"/face.png?seq={state.external_seq}"
+    )
     return JSONResponse({
         "ok": True,
         "path": interp.last_path if interp is not None else "fallback",
@@ -287,7 +294,33 @@ async def _api_say(request: Request) -> JSONResponse:
         "dominant_emotion": {
             "name": dominant_name, "level": round(dominant_val, 3),
         },
+        "face_url": face_url,
     })
+
+
+async def _api_face_png(request: Request) -> Response:
+    """``GET /face.png`` — the robot's current expression as an image.
+
+    A freeze-frame of the LED face computed from the live chemical
+    state, lit in the dominant emotion's color. The ``seq`` query param
+    is ignored; it exists so callers can cache-bust per exchange.
+    """
+    state = _api_state
+    if state is None:  # pragma: no cover - route only exists after create_app
+        return Response(content=b"", status_code=503)
+    chem = state.robot.current_chemicals()
+    dominant_name, dominant_val = state.robot.current_emotions().dominant()
+    face = FaceProjection.compute(chem)
+    png = render_face_png(
+        face,
+        mood_color=EMOTION_COLORS.get(dominant_name, DEFAULT_MOOD_COLOR),
+        mood_intensity=dominant_val,
+    )
+    return Response(
+        content=png,
+        media_type="image/png",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 # ── UI construction ───────────────────────────────────────────────
@@ -315,6 +348,7 @@ def create_app(
     if register_routes:
         app.add_static_files("/webassets", str(WEB_ASSETS_DIR))
         app.add_api_route("/api/say", _api_say, methods=["POST"])
+        app.add_api_route("/face.png", _api_face_png, methods=["GET"])
 
         @ui.page("/")
         def main_page() -> None:

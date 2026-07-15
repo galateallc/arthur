@@ -269,6 +269,15 @@ exchange on its next tick exactly like a typed message: status line,
 🗣 reply bubble, and speech (if the 🔊 toggle is on). The single-client
 assumption applies — one shared Robot hears everything.
 
+**`GET /face.png`** returns the robot's *current* expression as an
+image — a freeze-frame of the LED panel (same 36×30 dot geometry as
+the live renderer, lit in the dominant emotion's color), rasterized
+dependency-free in `face_image.py`. The `/api/say` response includes a
+ready-made absolute `face_url` with a `seq` cache-buster, so an
+integration that can only show images embeds the face right after
+telling the robot something. `Cache-Control: no-store` keeps proxies
+from serving a stale mood.
+
 Example — a Claude Code `UserPromptSubmit` hook script that lets the
 companion overhear everything you tell Claude (the hook receives
 `{"prompt": ...}` on stdin):
@@ -278,6 +287,63 @@ companion overhear everything you tell Claude (the hook receives
 jq '{text: .prompt}' | curl -s -X POST http://localhost:8080/api/say \
   -H 'Content-Type: application/json' -d @- > /dev/null
 ```
+
+#### Wiring it to a custom GPT (ChatGPT)
+
+A custom GPT with an **Action** pointing at a hosted Kindalive gives
+anyone the companion inside the ChatGPT app — phone included, nothing
+to install. The GPT calls the real engine (real impulses, real decay)
+and embeds the real face image each turn.
+
+1. Host Kindalive with HTTPS (the Docker image + any platform from
+   ["Always-on host"](#b-always-on-host-no-computer-needed) works) and
+   set `ANTHROPIC_API_KEY` so the interpreter is live.
+2. Create a GPT (ChatGPT → Explore GPTs → Create), add an **Action**
+   with this schema (replace `YOUR-HOST`):
+
+   ```yaml
+   openapi: 3.1.0
+   info:
+     title: Kindalive companion
+     version: "1.0"
+   servers:
+     - url: https://YOUR-HOST
+   paths:
+     /api/say:
+       post:
+         operationId: say
+         summary: Tell the robot companion something. It reacts with
+           its own feelings and returns its emotional state, spoken
+           reply, and a snapshot image URL of its face.
+         requestBody:
+           required: true
+           content:
+             application/json:
+               schema:
+                 type: object
+                 required: [text]
+                 properties:
+                   text:
+                     type: string
+                     description: What the robot overhears, in plain language.
+         responses:
+           "200":
+             description: The robot's reaction.
+   ```
+3. GPT instructions along these lines:
+
+   > You are the companion handler for a small robot with simulated
+   > neurochemistry. After EVERY user message, call the `say` action,
+   > passing the user's message as `text`. Then reply: first embed the
+   > robot's face using the returned `face_url` as a markdown image
+   > `![robot face](face_url)`, then relay the robot's `reply` (if
+   > any) as its spoken line, and mention its dominant emotion in one
+   > short sentence. The robot has its own feelings — never claim it
+   > mirrors the user's mood.
+
+Caveats: the app is single-client — one shared robot, one mood — so
+everyone talking to the GPT shares the same creature. Give the host a
+strong random URL path or keep the GPT private if that matters to you.
 
 ### 8. Reset (header)
 
@@ -310,6 +376,7 @@ are kept.
 | `kindalive/expression/web_ui.py` | NiceGUI app — layout, handlers, refresh loop, `/api/say` |
 | `kindalive/expression/face.py` | 12-muscle `FaceState` + `FaceProjection.compute` |
 | `kindalive/expression/face_3d.py` | Payload mapping + boot wiring |
+| `kindalive/expression/face_image.py` | Dependency-free PNG snapshot of the face (`/face.png`) |
 | `kindalive/expression/web_assets/face3d.js` | The LED dot-matrix face (2D-canvas renderer) |
 | `kindalive/expression/web_assets/style.css` | Dashboard styling + scanline overlay |
 | `kindalive/interpreter/anthropic_backend.py` | Claude backend |
