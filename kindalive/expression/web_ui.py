@@ -661,7 +661,7 @@ def main() -> None:
     ui.run(
         host=args.host,
         port=args.port,
-        title="Kindalive",
+        title="Arthur",
         dark=True,
         reload=False,
         show=False,
