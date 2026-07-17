@@ -6,10 +6,10 @@ FROM python:3.11-slim
 WORKDIR /app
 COPY . /app
 
-# Installs NiceGUI (core) + the Anthropic SDK ([live]) and bundles the
+# Installs NiceGUI (core) + the Anthropic SDK ([all]) and bundles the
 # web assets via package-data. The 3D face uses NiceGUI's own vendored
 # Three.js, so no extra browser/CDN dependency is needed.
-RUN pip install --no-cache-dir ".[live]"
+RUN pip install --no-cache-dir ".[all]"
 
 # Bind to all interfaces inside the container; the platform maps the
 # port. main() reads these env vars for its host/port defaults.
